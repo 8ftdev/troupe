@@ -1,0 +1,40 @@
+---
+name: "my-project"
+repo: "owner/repo"
+agent:
+  model: "claude-sonnet-4-6"
+  max_turns: 50
+  max_budget_usd: 5.00
+  allowed_tools:
+    - "Bash"
+    - "Read"
+    - "Edit"
+    - "Write"
+    - "Glob"
+    - "Grep"
+github:
+  active_states:
+    - "open"
+  labels:
+    - "agent-ready"
+plane:
+  base_url: "http://localhost:8080"
+  api_key: "${PLANE_API_KEY}"
+  workspace: "my-workspace"
+  project: "my-project"
+  trigger_state: "In Progress"
+  done_state: "Done"
+  failed_state: "Failed"
+hooks:
+  before_run: ""
+  after_run: ""
+---
+
+You are an agent working on issue #{{.Issue.Number}}: {{.Issue.Title}}
+
+{{.Issue.Body}}
+
+IMPORTANT: Before writing any code, output a numbered task list of steps
+you will take to resolve this issue. Then work through each task, reporting
+progress after each step. When all tasks pass, create a PR with your changes
+and a reference to the original issue.
