@@ -23,7 +23,7 @@ config         → WORKFLOW.MD parser + typed config
 | github | `internal/github/` | DONE | REST client (paginated issue fetch, label filtering, PR filtering), webhook handler (HMAC-SHA256 verification, event channel), webhook registration |
 | ngrok | `internal/ngrok/` | DONE | Starts ngrok subprocess, polls local API for HTTPS tunnel URL, graceful stop |
 | plane | `internal/plane/` | DONE | REST client (work items CRUD, state resolution, comments), external ID linking for GitHub sync |
-| runner | `internal/runner/` | TODO | Wraps `claude-agent-sdk-go`, manages single agent session lifecycle |
+| runner | `internal/runner/` | DONE | Wraps `claude-agent-sdk-go`, manages single agent session lifecycle, streams progress, detects PR creation |
 | orchestrator | `internal/orchestrator/` | TODO | Main loop: watch Plane for "In Progress" cards, dispatch runner, update status |
 
 ## Key Types
@@ -60,6 +60,15 @@ config         → WORKFLOW.MD parser + typed config
 - `Client.CreateComment(ctx, workItemID, html)` — post comment on work item
 - `Client.FindWorkItemByExternalID(ctx, source, id)` — find linked work item
 
+### runner
+- `Result` — Success, PRCreated, PRURL, Error, NumTurns, Duration, CostUSD
+- `ProgressFunc` — callback type for streaming progress updates
+- `New(cfg, repoDir, onProgress)` → `*Runner` — creates runner from config
+- `Runner.Run(ctx, prompt)` → `(*Result, error)` — executes agent session, streams progress, detects PR creation
+- Stream processing: extracts task lists from `TextBlock`, detects `gh pr create` from `ToolUseBlock`, captures PR URL from `ToolResultBlock`
+- Handles all `ResultMessage` subtypes: `ResultSuccess`, `ResultErrorMaxTurns`, `ResultErrorExecution`, `ResultErrorMaxBudget`
+- Runs `hooks.before_run` / `hooks.after_run` shell commands if configured
+
 ### ngrok
 - `Start(ctx, port)` → `*Tunnel` — launches ngrok, waits for HTTPS URL (15s timeout)
 - `Tunnel.Stop()` — kills subprocess
@@ -84,7 +93,7 @@ config         → WORKFLOW.MD parser + typed config
 
 ## Plans & Docs
 
-- [Implementation plan](docs/plans/troupe.md) — phases 0-3 done, 4-6 remaining
+- [Implementation plan](docs/plans/troupe.md) — phases 0-4 done, 5-6 remaining
 - [Harness Engineering spec](docs/plans/harness-engineering.html)
 
 ## Dev Commands
@@ -94,7 +103,7 @@ config         → WORKFLOW.MD parser + typed config
 |---------|-------------|
 | `go build ./cmd/troupe/` | Build the troupe binary |
 | `go build ./...` | Build all packages |
-| `go test ./...` | Run all tests (27 tests across config, github, plane) |
+| `go test ./...` | Run all tests (43 tests across config, github, plane, runner) |
 | `go test ./... -v` | Run all tests with verbose output |
 | `go vet ./...` | Run Go vet static analysis |
 | `golangci-lint run` | Run linter (errcheck, govet, staticcheck, unused, ineffassign, misspell, unconvert, unparam, revive) |
@@ -106,4 +115,5 @@ config         → WORKFLOW.MD parser + typed config
 | Module | Version | Purpose |
 |--------|---------|---------|
 | `gopkg.in/yaml.v3` | v3.0.1 | YAML frontmatter parsing in config package |
+| `github.com/partio-io/claude-agent-sdk-go` | v0.1.0 | Claude Code CLI subprocess management in runner package |
 <!-- END AUTO-GENERATED -->
