@@ -24,7 +24,7 @@ config         → WORKFLOW.MD parser + typed config
 | ngrok | `internal/ngrok/` | DONE | Starts ngrok subprocess, polls local API for HTTPS tunnel URL, graceful stop |
 | plane | `internal/plane/` | DONE | REST client (work items CRUD, state resolution, comments), external ID linking for GitHub sync |
 | runner | `internal/runner/` | DONE | Wraps `claude-agent-sdk-go`, manages single agent session lifecycle, streams progress, detects PR creation |
-| orchestrator | `internal/orchestrator/` | TODO | Main loop: watch Plane for "In Progress" cards, dispatch runner, update status |
+| orchestrator | `internal/orchestrator/` | DONE | Sequential processing loop: polls Plane for triggered cards, matches to GitHub issues, runs agent, updates card state |
 
 ## Key Types
 
@@ -69,6 +69,17 @@ config         → WORKFLOW.MD parser + typed config
 - Handles all `ResultMessage` subtypes: `ResultSuccess`, `ResultErrorMaxTurns`, `ResultErrorExecution`, `ResultErrorMaxBudget`
 - Runs `hooks.before_run` / `hooks.after_run` shell commands if configured
 
+### orchestrator
+- `PlaneClient` / `GitHubClient` / `AgentRunner` — interfaces for testability
+- `RunnerFactory` — `func(ProgressFunc) AgentRunner`, creates runner per work item with scoped progress callback
+- `New(cfg, plane, github, repoDir, pollInterval, log, newRunner)` → `*Orchestrator`
+- `Orchestrator.Run(ctx)` — blocks until ctx cancelled, polls Plane for triggered cards, processes sequentially
+- `processNext(ctx)` — finds oldest triggered card, matches GitHub issue, renders prompt, runs agent, updates card state
+- `handleResult(ctx, cardID, result)` — moves card to Done (PR created) or Failed (error/no PR)
+- `matchGitHubIssue(ctx, card)` — resolves card's external_id to GitHub issue number
+- `pickOldest(items)` — sorts by CreatedAt, returns first
+- Graceful shutdown: checks `ctx.Done()` at loop top and between polls
+
 ### ngrok
 - `Start(ctx, port)` → `*Tunnel` — launches ngrok, waits for HTTPS URL (15s timeout)
 - `Tunnel.Stop()` — kills subprocess
@@ -80,6 +91,7 @@ config         → WORKFLOW.MD parser + typed config
 |----------|----------|-------------|---------|
 | `GITHUB_TOKEN` | Yes | GitHub personal access token for API access | `github.NewClient` |
 | `PLANE_API_KEY` | Yes | Plane API key, referenced as `${PLANE_API_KEY}` in WORKFLOW.MD frontmatter | `config.Parse` (env expansion) |
+| `WEBHOOK_SECRET` | No | HMAC-SHA256 secret for GitHub webhook verification | `github.WebhookHandler` |
 <!-- END AUTO-GENERATED -->
 
 ## Key Decisions
@@ -90,10 +102,12 @@ config         → WORKFLOW.MD parser + typed config
 - **Completion detection**: `ResultMessage` subtypes + `PreToolUse` hook for `gh pr create`
 - **Task list pattern**: WORKFLOW.MD instructs agent to output numbered tasks first
 - **Env var expansion**: `${VAR}` in YAML frontmatter expanded via `os.Expand` before parsing
+- **npm distribution**: esbuild pattern — main package with platform-specific optional dependencies
+- **cobra CLI**: single root command with `--workflow-file` (required), `--poll-interval`, `--webhook-port`
 
 ## Plans & Docs
 
-- [Implementation plan](docs/plans/troupe.md) — phases 0-4 done, 5-6 remaining
+- [Implementation plan](docs/plans/troupe.md) — all phases (0-6) complete
 - [Harness Engineering spec](docs/plans/harness-engineering.html)
 
 ## Dev Commands
@@ -103,10 +117,15 @@ config         → WORKFLOW.MD parser + typed config
 |---------|-------------|
 | `go build ./cmd/troupe/` | Build the troupe binary |
 | `go build ./...` | Build all packages |
-| `go test ./...` | Run all tests (43 tests across config, github, plane, runner) |
+| `go test ./...` | Run all tests (61 tests across config, github, plane, runner, orchestrator) |
 | `go test ./... -v` | Run all tests with verbose output |
 | `go vet ./...` | Run Go vet static analysis |
 | `golangci-lint run` | Run linter (errcheck, govet, staticcheck, unused, ineffassign, misspell, unconvert, unparam, revive) |
+| `make build` | Build binary with version from git tags |
+| `make dist` | Cross-compile for darwin-arm64, darwin-amd64, linux-amd64, linux-arm64 |
+| `make test` | Run all tests |
+| `make lint` | Run go vet + golangci-lint |
+| `scripts/npm-pack.sh <version>` | Build Go binaries and copy into npm platform packages |
 <!-- END AUTO-GENERATED -->
 
 ## Dependencies
@@ -116,4 +135,5 @@ config         → WORKFLOW.MD parser + typed config
 |--------|---------|---------|
 | `gopkg.in/yaml.v3` | v3.0.1 | YAML frontmatter parsing in config package |
 | `github.com/partio-io/claude-agent-sdk-go` | v0.1.0 | Claude Code CLI subprocess management in runner package |
+| `github.com/spf13/cobra` | v1.10.2 | CLI framework with flag parsing |
 <!-- END AUTO-GENERATED -->

@@ -1,0 +1,8 @@
+{
+  "name": "@8ftdev/troupe-linux-arm64",
+  "version": "0.0.0",
+  "description": "troupe binary for Linux arm64",
+  "license": "MIT",
+  "os": ["linux"],
+  "cpu": ["arm64"]
+}

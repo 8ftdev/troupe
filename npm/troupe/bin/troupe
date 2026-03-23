@@ -1,0 +1,43 @@
+#!/usr/bin/env node
+
+"use strict";
+
+const { execFileSync } = require("child_process");
+const path = require("path");
+const os = require("os");
+
+const PLATFORMS = {
+  "darwin-arm64": "@8ftdev/troupe-darwin-arm64",
+  "darwin-x64": "@8ftdev/troupe-darwin-x64",
+  "linux-x64": "@8ftdev/troupe-linux-x64",
+  "linux-arm64": "@8ftdev/troupe-linux-arm64",
+};
+
+function getBinaryPath() {
+  const key = `${os.platform()}-${os.arch()}`;
+  const pkg = PLATFORMS[key];
+  if (!pkg) {
+    throw new Error(
+      `Unsupported platform: ${key}. Supported: ${Object.keys(PLATFORMS).join(", ")}`
+    );
+  }
+
+  try {
+    return require.resolve(`${pkg}/bin/troupe`);
+  } catch {
+    throw new Error(
+      `Could not find binary package ${pkg}. ` +
+        `Try reinstalling: npm install @8ftdev/troupe`
+    );
+  }
+}
+
+try {
+  execFileSync(getBinaryPath(), process.argv.slice(2), { stdio: "inherit" });
+} catch (e) {
+  if (e.status !== undefined) {
+    process.exit(e.status);
+  }
+  console.error(e.message);
+  process.exit(1);
+}
